@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Run Romanesco Fractal </title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Segoe UI', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            transition: background-color 0.5s ease;
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #fff;
+            font-size: 28px;
+            font-weight: bold;
+            text-shadow: 0 0 10px #7FFF00;
+            z-index: 10;
+            pointer-events: none;
+            transition: color 0.5s ease, text-shadow 0.5s ease;
+        }
+        /* Стили для кнопки переключения темы */
+        #theme-toggle {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 10px 18px;
+            background: rgba(0, 0, 0, 0.6);
+            color: #7FFF00;
+            border: 2px solid #7FFF00;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+            z-index: 20;
+            box-shadow: 0 0 10px rgba(127, 255, 0, 0.3);
+            transition: all 0.3s ease;
+            outline: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        #theme-toggle:active {
+            transform: scale(0.95);
+        }
+        #controls-hint {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255,255,255,0.7);
+            font-size: 14px;
+            pointer-events: none;
+            text-align: center;
+            z-index: 10;
+            line-height: 1.5;
+            background: rgba(0,0,0,0.4);
+            padding: 8px 15px;
+            border-radius: 20px;
+            transition: all 0.5s ease;
+        }
+
+        /* Классы для светлой темы */
+        body.light-mode {
+            background-color: #ffffff;
+        }
+        body.light-mode #ui {
+            color: #1a5c00;
+            text-shadow: 0 0 10px rgba(26, 92, 0, 0.2);
+        }
+        body.light-mode #theme-toggle {
+            background: rgba(255, 255, 255, 0.8);
+            color: #1a5c00;
+            border-color: #1a5c00;
+            box-shadow: 0 0 10px rgba(26, 92, 0, 0.15);
+        }
+        body.light-mode #controls-hint {
+            background: rgba(255, 255, 255, 0.7);
+            color: #333333;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+</head>
+<body>
+
+    <div id="ui">ДИСТАНЦИЯ: <span id="score">0</span> м</div>
+    <button id="theme-toggle">Сменить тему</button>
+    
+    <div id="controls-hint">
+        <b>ПК:</b> A / D или Стрелки<br>
+        <b>Андроид:</b> Наклоняйте телефон ИЛИ нажимайте на левую/правую часть экрана
+    </div>
+
+    <script>
+        // --- Создание 3D сцены ---
+        const scene = new THREE.Scene();
+        
+        // Цветовые конфигурации для тем
+        const themes = {
+            dark: {
+                background: 0x000500,
+                fogDensity: 0.015,
+                tunnelColorHSL: 0.26,
+                tunnelLightness: 0.35,
+                emissiveColor: 0x0c2400,
+                ambientColor: 0x002200,
+                playerColor: 0x00ffff
+            },
+            light: {
+                background: 0xffffff,
+                fogDensity: 0.012,
+                tunnelColorHSL: 0.30,
+                tunnelLightness: 0.50,
+                emissiveColor: 0x224411,
+                ambientColor: 0x668866,
+                playerColor: 0x990000 // Темно-красный корабль для контраста на белом
+            }
+        };
+
+        let currentTheme = 'dark';
+
+        // Инициализируем туман под темную тему
+        scene.fog = new THREE.FogExp2(themes.dark.background, themes.dark.fogDensity); 
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // --- Освещение ---
+        const ambientLight = new THREE.AmbientLight(themes.dark.ambientColor, 1.5);
+        scene.add(ambientLight);
+        const neonLight = new THREE.PointLight(0x00ffff, 2, 40);
+        scene.add(neonLight);
+
+        // --- Фрактальный Туннель Романеско ---
+        const tunnelGroup = new THREE.Group();
+        scene.add(tunnelGroup);
+
+        const tunnelRadius = 12;
+        const tunnelLength = 400;
+        const segmentsCount = 130;
+        const circlesCount = 16; 
+
+        function createTunnel() {
+            for (let i = 0; i < segmentsCount; i++) {
+                const z = -i * 3; 
+
+                for (let j = 0; j < circlesCount; j++) {
+                    const angle = (j / circlesCount) * Math.PI * 2;
+                    const bump = Math.sin(angle * 8) * Math.cos(z * 0.1) * 0.7;
+                    const r = tunnelRadius + bump;
+
+                    const x = Math.cos(angle) * r;
+                    const y = Math.sin(angle) * r;
+
+                    const coneHeight = 2 + Math.random() * 2;
+                    const geo = new THREE.ConeGeometry(0.55, coneHeight, 4);
+                    
+                    const mat = new THREE.MeshStandardMaterial({
+                        color: new THREE.Color().setHSL(themes.dark.tunnelColorHSL, 1, themes.dark.tunnelLightness),
+                        emissive: new THREE.Color(themes.dark.emissiveColor),
+                        roughness: 0.5
+                    });
+
+                    const cone = new THREE.Mesh(geo, mat);
+                    cone.position.set(x, y, z);
+                    
+                    cone.lookAt(new THREE.Vector3(0, 0, z));
+                    cone.rotateX(Math.PI / 2);
+
+                    tunnelGroup.add(cone);
+                }
+            }
+        }
+        createTunnel();
+
+        // --- Препятствия: Фракталы Фибоначчи ---
+        const obstacles = new THREE.Group();
+        scene.add(obstacles);
+
+        function createFractalObstacle(zPos) {
+            const group = new THREE.Group();
+            const count = 12;
+            const goldenAngle = 2.39996;
+
+            for(let i = 0; i < count; i++) {
+                const ratio = i / count;
+                const r = Math.sqrt(ratio) * 1.4;
+                const theta = i * goldenAngle;
+
+                const subGeo = new THREE.ConeGeometry(0.3 * (1 - ratio), 1 * (1 - ratio), 4);
+                const subMat = new THREE.MeshStandardMaterial({ 
+                    color: 0xff00ff, 
+                    emissive: 0x440044,
+                    metalness: 0.7
+                });
+                const subCone = new THREE.Mesh(subGeo, subMat);
+
+                subCone.position.set(r * Math.cos(theta), (1 - ratio) * 1.2, r * Math.sin(theta));
+                subCone.rotation.z = theta;
+                group.add(subCone);
+            }
+
+            const spawnAngle = Math.random() * Math.PI * 2;
+            const obsR = tunnelRadius - 2.4; 
+            
+            group.position.set(Math.cos(spawnAngle) * obsR, Math.sin(spawnAngle) * obsR, zPos);
+            group.userData = { angle: spawnAngle, radius: obsR };
+            obstacles.add(group);
+        }
+
+        for (let z = -60; z > -tunnelLength; z -= 28) {
+            createFractalObstacle(z);
+        }
+
+        // --- Игрок ---
+        const playerGroup = new THREE.Group();
+        scene.add(playerGroup);
+
+        const playerMesh = new THREE.Mesh(
+            new THREE.ConeGeometry(0.35, 1.1, 4),
+            new THREE.MeshBasicMaterial({ color: themes.dark.playerColor }) 
+        );
+        playerMesh.rotation.x = -Math.PI / 2; 
+        playerGroup.add(playerMesh);
+
+        let playerAngle = 0;
+        let targetAngle = 0;
+        const playerRadiusPos = tunnelRadius - 1.4;
+
+        // ====================================================
+        // --- ЛОГИКА ПЕРЕКЛЮЧЕНИЯ ТЕМЫ ---
+        // ====================================================
+        const themeBtn = document.getElementById('theme-toggle');
+        
+        themeBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Чтобы клик по кнопке не вызывал движение тапом
+            
+            // Меняем флаг темы
+            currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            const config = themes[currentTheme];
+
+            // 1. Меняем CSS интерфейса
+            document.body.classList.toggle('light-mode');
+
+            // 2. Обновляем параметры 3D сцены (туман и фон рендера)
+            scene.fog.color.setHex(config.background);
+            scene.fog.density = config.fogDensity;
+            ambientLight.color.setHex(config.ambientColor);
+
+            // 3. Перекрашиваем все конусы туннеля дороги под новую палитру
+            tunnelGroup.children.forEach((cone, idx) => {
+                // Оставляем небольшую рандомную разницу в оттенках для рельефа
+                const z = cone.position.z;
+                cone.material.color.setHSL(config.tunnelColorHSL + Math.sin(z * 0.01) * 0.02, 1, config.tunnelLightness);
+                cone.material.emissive.setHex(config.emissiveColor);
+            });
+
+            // 4. Меняем цвет корабля игрока
+            playerMesh.material.color.setHex(config.playerColor);
+        });
+
+        // ====================================================
+        // --- СИСТЕМА УНИВЕРСАЛЬНОГО УПРАВЛЕНИЯ ---
+        // ====================================================
+        let keyboardDir = 0; 
+        let touchDir = 0;    
+        let tiltDir = 0;     
+
+        const rotateSpeed = 0.075;
+
+        // ПК Клавиатура
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'a' || e.key === 'ArrowLeft') keyboardDir = -1;
+            if (e.key === 'd' || e.key === 'ArrowRight') keyboardDir = 1;
+        });
+        window.addEventListener('keyup', () => keyboardDir = 0);
+
+        // Нажатия на экран (Android / iOS)
+        window.addEventListener('touchstart', (e) => {
+            const touchX = e.touches[0].clientX;
+            if (touchX < window.innerWidth / 2) {
+                touchDir = -1; 
+            } else {
+                touchDir = 1;  
+            }
+        });
+        window.addEventListener('touchend', () => touchDir = 0);
+
+        // Акселерометр (Наклоны)
+        if (window.DeviceOrientationEvent) {
+            window.addEventListener('deviceorientation', (event) => {
+                let tilt = event.gamma; 
+                if (window.innerHeight < window.innerWidth) {
+                    tilt = event.beta;
+                    if (window.orientation === 90) tilt = -tilt; 
+                }
+                if (Math.abs(tilt) > 3) {
+                    tiltDir = Math.max(-1, Math.min(1, tilt / 20));
+                } else {
+                    tiltDir = 0;
+                }
+            }, true);
+        }
+
+        // Активация датчиков на iOS 13+
+        document.body.addEventListener('click', () => {
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission().catch(console.error);
+            }
+        }, { once: true });
+
+
+        // --- Игровой цикл ---
+        let forwardSpeed = 0.85;
+        const maxSpeed = 2.8;
+        let distanceTraveled = 0;
+        let isGameOver = false;
+
+        function gameLoop() {
+            if (isGameOver) return;
+
+            requestAnimationFrame(gameLoop);
+
+            camera.position.z -= forwardSpeed;
+            playerGroup.position.z = camera.position.z - 7.5; 
+            neonLight.position.copy(playerGroup.position);
+
+            forwardSpeed = Math.min(maxSpeed, forwardSpeed + 0.00025);
+            distanceTraveled += Math.round(forwardSpeed * 0.5);
+            document.getElementById('score').innerText = distanceTraveled;
+
+            let finalMoveDir = keyboardDir + touchDir + tiltDir;
+            finalMoveDir = Math.max(-1, Math.min(1, finalMoveDir));
+
+            targetAngle += finalMoveDir * rotateSpeed;
+            playerAngle = THREE.MathUtils.lerp(playerAngle, targetAngle, 0.25);
+
+            playerGroup.position.x = Math.cos(playerAngle) * playerRadiusPos;
+            playerGroup.position.y = Math.sin(playerAngle) * playerRadiusPos;
+            playerGroup.rotation.z = playerAngle + Math.PI / 2;
+
+            if (camera.position.z < -tunnelLength + 100) {
+                camera.position.z = 0;
+                obstacles.children.forEach((obs) => {
+                    obs.position.z += tunnelLength - 100;
+                    const newAngle = Math.random() * Math.PI * 2;
+                    obs.position.x = Math.cos(newAngle) * obs.userData.radius;
+                    obs.position.y = Math.sin(newAngle) * obs.userData.radius;
+                    obs.userData.angle = newAngle;
+                });
+            }
+
+            // Проверка столкновений
+            obstacles.children.forEach((obs) => {
+                const zDist = Math.abs(playerGroup.position.z - obs.position.z);
+                if (zDist < 1.4) {
+                    const a1 = ((playerAngle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+                    const a2 = ((obs.userData.angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+                    
+                    let angleDiff = Math.abs(a1 - a2);
+                    if (angleDiff > Math.PI) angleDiff = Math.PI * 2 - angleDiff;
+
+                    if (angleDiff < 0.36) {
+                        isGameOver = true;
+                        alert(`БАХ! Планер врезался во фрактал.\nРезультат: ${distanceTraveled} метров.`);
+                        location.reload(); 
+                    }
+                }
+            });
+
+            camera.rotation.z = THREE.MathUtils.lerp(camera.rotation.z, playerAngle - Math.PI / 2, 0.05);
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        gameLoop();
+    </script>
+<script src="https://dmamax.netlify.app/legal-module.js"></script>
+
+</body>
+</html>
